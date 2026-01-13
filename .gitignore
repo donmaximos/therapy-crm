@@ -1,0 +1,10 @@
+# Python Specific
+venv/
+__pycache__/
+*.pyc
+
+# Database (Για αρχή δεν ανεβάζουμε τη βάση)
+db.sqlite3
+
+# OS Specific
+.DS_Store
