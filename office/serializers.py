@@ -10,7 +10,7 @@ class AppointmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Appointment
         fields = '__all__'
-        # ΣΒΗΣΑΜΕ ΤΟ depth = 1 ΑΠΟ ΕΔΩ
+        
 
     # Αυτή η μέθοδος τρέχει ΜΟΝΟ όταν το API στέλνει απαντήσεις (GET)
     # Λέμε: "Πάρε την κανονική απάντηση, αλλά στο πεδίο 'patient' 

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
+import Login from './Login'; // <--- Σιγουρέψου ότι έφτιαξες το Login.jsx
 
 // Εισαγωγή εξαρτημάτων Material UI
 import { 
@@ -12,8 +13,26 @@ import {
 import PersonIcon from '@mui/icons-material/Person'
 import PhoneIcon from '@mui/icons-material/Phone'
 import EventIcon from '@mui/icons-material/Event'
+import LogoutIcon from '@mui/icons-material/Logout'; // Εικονίδιο εξόδου
+
+// --- ΡΥΘΜΙΣΗ AXIOS (Step 6 - Μέρος Α) ---
+// Λέμε στο axios: "Πριν στείλεις οτιδήποτε στο Django, κόλλα πάνω το Token αν το έχουμε"
+axios.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
 
 function App() {
+  // --- STATE ---
+  // Ελέγχουμε αν υπάρχει token στη μνήμη του browser
+  const [token, setToken] = useState(localStorage.getItem('token'));
+
   const [patients, setPatients] = useState([])
   const [appointments, setAppointments] = useState([])
   const [duePatients, setDuePatients] = useState([]) 
@@ -21,12 +40,7 @@ function App() {
   const [open, setOpen] = useState(false)
   const [selectedPatient, setSelectedPatient] = useState(null)
   
-  const [formData, setFormData] = useState({
-    date: '',
-    time: '',
-    notes: ''
-  })
-
+  const [formData, setFormData] = useState({ date: '', time: '', notes: '' })
   const [notification, setNotification] = useState({ open: false, message: '' })
 
   // --- Helpers ---
@@ -36,30 +50,42 @@ function App() {
     return new Date(dateString).toLocaleDateString('el-GR', options);
   }
 
-  // --- API ---
+  // --- API Functions ---
   const fetchPatients = () => {
     axios.get('http://127.0.0.1:8000/api/patients/')
       .then(response => setPatients(response.data))
-      .catch(error => console.error(error))
+      .catch(error => console.error("Error fetching patients:", error))
   }
 
   const fetchAppointments = () => {
     axios.get('http://127.0.0.1:8000/api/appointments/')
       .then(response => setAppointments(response.data))
-      .catch(error => console.error(error))
+      .catch(error => console.error("Error fetching appointments:", error))
   }
 
   const checkDueInvoices = () => {
     axios.get('http://127.0.0.1:8000/api/patients/pending_invoices/')
       .then(response => setDuePatients(response.data))
-      .catch(error => console.error(error))
+      .catch(error => console.error("Error checking invoices:", error))
   }
 
+  // --- USE EFFECT ---
   useEffect(() => {
-    fetchPatients()
-    fetchAppointments()
-    checkDueInvoices()
-  }, [])
+    // Τραβάμε δεδομένα ΜΟΝΟ αν είμαστε συνδεδεμένοι
+    if (token) {
+        fetchPatients()
+        fetchAppointments()
+        checkDueInvoices()
+    }
+  }, [token]) // Αν αλλάξει το token (μπεις ή βγεις), ξανατρέξε
+
+  // --- Step 5: Logout Function ---
+  const handleLogout = () => {
+    localStorage.removeItem('token'); // Σβήσε το token από τη μνήμη
+    setToken(null); // Ενημέρωσε το React ότι βγήκαμε
+    setPatients([]); // Καθάρισε τα δεδομένα από την οθόνη
+    setAppointments([]);
+  };
 
   // --- Handlers ---
   const handleOpenDialog = (patient) => {
@@ -98,6 +124,13 @@ function App() {
       })
   }
 
+  // --- Step 6 (Μέρος Β): Ο ΠΟΡΤΙΕΡΗΣ ---
+  // Αν δεν υπάρχει token, δείξε ΜΟΝΟ το Login και σταμάτα εδώ.
+  if (!token) {
+    return <Login onLoginSuccess={setToken} />;
+  }
+
+  // --- ΤΟ ΚΥΡΙΩΣ DASHBOARD (Εμφανίζεται μόνο αν έχεις token) ---
   return (
     <div style={{ backgroundColor: '#f5f5f5', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       
@@ -106,6 +139,11 @@ function App() {
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
             Therapy CRM
           </Typography>
+          
+          {/* ΚΟΥΜΠΙ LOGOUT */}
+          <Button color="inherit" onClick={handleLogout} startIcon={<LogoutIcon />}>
+            Logout
+          </Button>
         </Toolbar>
       </AppBar>
 
@@ -127,56 +165,33 @@ function App() {
           </Alert>
         )}
 
-        {/* --- ΚΥΡΙΩΣ LAYOUT (FLEXBOX) --- */}
-        <Box sx={{ 
-          display: 'flex', 
-          flexDirection: { xs: 'column', md: 'row' }, // Κάθετα σε κινητά, Οριζόντια σε PC
-          gap: 4,
-          alignItems: 'flex-start' 
-        }}>
+        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 4, alignItems: 'flex-start' }}>
           
-          {/* ΑΡΙΣΤΕΡΑ: Λίστα Ασθενών (Πιάνει το 65% του πλάτους) */}
+          {/* ΑΡΙΣΤΕΡΑ */}
           <Box sx={{ flex: { md: 2 }, width: '100%' }}>
             <Typography variant="h5" gutterBottom sx={{ fontWeight: 'bold', color: '#333' }}>
               Οι Ασθενείς μου
             </Typography>
-            
             <Grid container spacing={3}>
               {patients.map(patient => (
-                // Χρησιμοποιούμε την παλιά σύνταξη (item) που δούλευε σίγουρα στη διάταξη
                 <Grid item xs={12} sm={6} lg={4} key={patient.id}>
                   <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', boxShadow: 3 }}>
                     <CardContent sx={{ flexGrow: 1 }}>
                       <div style={{ display: 'flex', alignItems: 'center', marginBottom: 10 }}>
                         <PersonIcon color="primary" sx={{ marginRight: 1 }} />
-                        <Typography variant="h6">
-                          {patient.last_name} {patient.first_name}
-                        </Typography>
+                        <Typography variant="h6">{patient.last_name} {patient.first_name}</Typography>
                       </div>
-                      
-                      <Typography color="text.secondary" sx={{ mb: 1 }}>
-                        <strong>Γονέας:</strong> {patient.parent_name}
-                      </Typography>
-                      
+                      <Typography color="text.secondary" sx={{ mb: 1 }}><strong>Γονέας:</strong> {patient.parent_name}</Typography>
                       <div style={{ display: 'flex', alignItems: 'center', color: '#666' }}>
                         <PhoneIcon fontSize="small" sx={{ marginRight: 0.5 }} />
                         <Typography variant="body2">{patient.parent_phone}</Typography>
                       </div>
-                      
                       {patient.next_invoice_date && (
-                        <Chip 
-                          label={`Τιμολόγηση: ${formatDate(patient.next_invoice_date)}`} 
-                          color="warning" 
-                          size="small" 
-                          sx={{ marginTop: 2, width: '100%' }}
-                        />
+                        <Chip label={`Τιμολόγηση: ${formatDate(patient.next_invoice_date)}`} color="warning" size="small" sx={{ marginTop: 2, width: '100%' }} />
                       )}
                     </CardContent>
-                    
                     <CardActions sx={{ padding: 2, paddingTop: 0 }}>
-                      <Button fullWidth variant="contained" onClick={() => handleOpenDialog(patient)}>
-                        Νεο Ραντεβου
-                      </Button>
+                      <Button fullWidth variant="contained" onClick={() => handleOpenDialog(patient)}>Νεο Ραντεβου</Button>
                     </CardActions>
                   </Card>
                 </Grid>
@@ -184,59 +199,27 @@ function App() {
             </Grid>
           </Box>
 
-          {/* ΔΕΞΙΑ: Πρόγραμμα (Πιάνει το 35% του πλάτους) */}
+          {/* ΔΕΞΙΑ */}
           <Box sx={{ flex: { md: 1 }, width: '100%', minWidth: '300px' }}>
             <Paper elevation={4} sx={{ backgroundColor: '#fff', borderRadius: 2, overflow: 'hidden', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}>
-              
               <div style={{ padding: '20px', backgroundColor: '#f9fafb', borderBottom: '1px solid #eee', display: 'flex', alignItems: 'center' }}>
                 <EventIcon color="secondary" sx={{ marginRight: 1 }} />
-                <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#444' }}>
-                  Πρόγραμμα
-                </Typography>
+                <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#444' }}>Πρόγραμμα</Typography>
               </div>
-
               <List sx={{ overflow: 'auto', flexGrow: 1, padding: 0 }}>
                 {appointments.length === 0 ? (
-                  <div style={{ padding: 20, textAlign: 'center', color: '#888' }}>
-                    Δεν υπάρχουν ραντεβού.
-                  </div>
+                  <div style={{ padding: 20, textAlign: 'center', color: '#888' }}>Δεν υπάρχουν ραντεβού.</div>
                 ) : (
                   appointments.map((app) => (
                     <div key={app.id}>
                       <ListItem alignItems="flex-start" sx={{ padding: 2 }}>
-                        
-                        {/* Κουτάκι Ώρας */}
-                        <div style={{ 
-                            display: 'flex', 
-                            flexDirection: 'column', 
-                            alignItems: 'center', 
-                            justifyContent: 'center',
-                            marginRight: 15,
-                            backgroundColor: '#e3f2fd',
-                            padding: '8px',
-                            borderRadius: '8px',
-                            minWidth: '65px',
-                            border: '1px solid #90caf9'
-                          }}>
-                          <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: '#1565c0' }}>
-                            {app.time.slice(0, 5)}
-                          </Typography>
-                          <Typography variant="caption" sx={{ color: '#555', fontWeight: '500' }}>
-                            {formatDate(app.date).slice(0, 5)}
-                          </Typography>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', marginRight: 15, backgroundColor: '#e3f2fd', padding: '8px', borderRadius: '8px', minWidth: '65px', border: '1px solid #90caf9' }}>
+                          <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: '#1565c0' }}>{app.time.slice(0, 5)}</Typography>
+                          <Typography variant="caption" sx={{ color: '#555', fontWeight: '500' }}>{formatDate(app.date).slice(0, 5)}</Typography>
                         </div>
-
                         <ListItemText
-                          primary={
-                            <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
-                              {app.patient.last_name} {app.patient.first_name}
-                            </Typography>
-                          }
-                          secondary={
-                            <Typography component="span" variant="body2" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-                              {app.notes ? `📝 ${app.notes}` : "— Χωρίς σημειώσεις"}
-                            </Typography>
-                          }
+                          primary={<Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>{app.patient.last_name} {app.patient.first_name}</Typography>}
+                          secondary={<Typography component="span" variant="body2" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>{app.notes ? `📝 ${app.notes}` : "— Χωρίς σημειώσεις"}</Typography>}
                         />
                       </ListItem>
                       <Divider component="li" />
@@ -249,35 +232,19 @@ function App() {
 
         </Box>
 
-        {/* Modal */}
         <Dialog open={open} onClose={handleCloseDialog} fullWidth maxWidth="sm">
-          <DialogTitle sx={{ backgroundColor: '#1976d2', color: 'white' }}>
-            Νέο Ραντεβού: {selectedPatient?.last_name}
-          </DialogTitle>
+          <DialogTitle sx={{ backgroundColor: '#1976d2', color: 'white' }}>Νέο Ραντεβού: {selectedPatient?.last_name}</DialogTitle>
           <DialogContent sx={{ paddingTop: '20px !important' }}>
             <Grid container spacing={2}>
-              <Grid item xs={6}>
-                <TextField label="Ημερομηνία" type="date" fullWidth InputLabelProps={{ shrink: true }}
-                  value={formData.date} onChange={(e) => setFormData({...formData, date: e.target.value})} />
-              </Grid>
-              <Grid item xs={6}>
-                <TextField label="Ώρα" type="time" fullWidth InputLabelProps={{ shrink: true }}
-                  value={formData.time} onChange={(e) => setFormData({...formData, time: e.target.value})} />
-              </Grid>
-              <Grid item xs={12}>
-                <TextField label="Σημειώσεις" fullWidth multiline rows={3}
-                  value={formData.notes} onChange={(e) => setFormData({...formData, notes: e.target.value})} />
-              </Grid>
+              <Grid item xs={6}><TextField label="Ημερομηνία" type="date" fullWidth InputLabelProps={{ shrink: true }} value={formData.date} onChange={(e) => setFormData({...formData, date: e.target.value})} /></Grid>
+              <Grid item xs={6}><TextField label="Ώρα" type="time" fullWidth InputLabelProps={{ shrink: true }} value={formData.time} onChange={(e) => setFormData({...formData, time: e.target.value})} /></Grid>
+              <Grid item xs={12}><TextField label="Σημειώσεις" fullWidth multiline rows={3} value={formData.notes} onChange={(e) => setFormData({...formData, notes: e.target.value})} /></Grid>
             </Grid>
           </DialogContent>
-          <DialogActions sx={{ padding: 2 }}>
-            <Button onClick={handleCloseDialog}>Ακυρωση</Button>
-            <Button onClick={handleSubmit} variant="contained">Αποθηκευση</Button>
-          </DialogActions>
+          <DialogActions sx={{ padding: 2 }}><Button onClick={handleCloseDialog}>Ακυρωση</Button><Button onClick={handleSubmit} variant="contained">Αποθηκευση</Button></DialogActions>
         </Dialog>
 
-        <Snackbar open={notification.open} autoHideDuration={4000} onClose={() => setNotification({ ...notification, open: false })}
-          anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+        <Snackbar open={notification.open} autoHideDuration={4000} onClose={() => setNotification({ ...notification, open: false })} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
           <Alert severity="success" variant="filled" sx={{ width: '100%' }}>{notification.message}</Alert>
         </Snackbar>
 
